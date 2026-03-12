@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs / Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ambientes Virtuais
+venv/
+env/
+.env
+.venv
+env.bak/
+venv.bak/
+
+# Diretórios de Dados (gerados pelos scripts)
+data/raw/
+data/processed/
+data/results/
+data/models/
+# Ignorar arquivos csv específicos caso queira manter as pastas
+*.csv
+*.txt
+
+# Exceções (arquivos que queremos manter no repositório, caso decida ter algum placeholder)
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/results/.gitkeep
+!data/models/.gitkeep
+
+# Modelos
+*.pkl
+*.joblib
+*.h5
+*.model
+
+# Logs
+*.log
+pipeline.log
+
+# Jupyter Notebook (caso venha a usar)
+.ipynb_checkpoints
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Agent Data
+.gemini/
