@@ -51,7 +51,14 @@ class TrendPredictor:
         genres = features_df["genero"].tolist()
 
         # Features (excluir colunas não-feature)
-        drop_cols = ["genero", "target_popularidade"]
+        drop_cols = [
+            "genero", 
+            "target_popularidade",
+            "popularidade_media",
+            "popularidade_mediana",
+            "popularidade_std",
+            "popularidade_max"
+        ]
         feature_cols = [c for c in features_df.columns if c not in drop_cols]
         X = features_df[feature_cols].values
 

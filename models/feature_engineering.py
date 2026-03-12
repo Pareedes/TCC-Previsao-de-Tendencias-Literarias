@@ -181,8 +181,17 @@ class FeatureEngineer:
         """
         from sklearn.model_selection import train_test_split
 
-        # Remover colunas não-feature
-        drop_cols = ["genero", target_col]
+        # Remover colunas não-feature (evitar Data Leakage)
+        drop_cols = [
+            "genero", 
+            target_col,
+            "popularidade_media",
+            "popularidade_mediana",
+            "popularidade_std",
+            "popularidade_max"
+        ]
+        
+        # Garantir que ignoramos colunas que possam não existir
         feature_cols = [c for c in features_df.columns if c not in drop_cols]
 
         X = features_df[feature_cols].values

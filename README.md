@@ -71,7 +71,7 @@ Isso abrirá o menu que o guiará pelas 7 Funcionalidades do sistema
 
 ---
 
-## 👨‍🎓 Autor
+## Autor
 - **Gabriel Paredes Ferreira** 
 - *IFTM - Campus Avançado Uberaba Parque Tecnológico*
 - *Curso*: Engenharia de Computação

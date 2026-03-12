@@ -50,7 +50,7 @@ Durante a vida do pipeline, os seguintes DataPoints principais são mapeados:
 - `total_avaliacoes` (Inteiro): Total de reviews simples.
 - `total_leitores` (Inteiro): Soma de usuários que marcaram (Leu, Lendo, Quero Ler).
 - `total_resenhas` (Inteiro): Total de contribuições textuais gravadas.
-- `resenha_texto` (String): O conteúdo massivo escrito pelos leitores.
+- `resenha_texto` (String): O conteúdo do tipo resenha escrito pelos leitores (públicas).
 - `resenha_data` (Data): Registra o dia/hora que o usuário redigiu a resenha.
 
 ### Variáveis Tratadas e Calculadas Matematicamente
