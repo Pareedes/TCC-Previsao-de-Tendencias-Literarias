@@ -32,6 +32,7 @@ data/models/
 !data/processed/.gitkeep
 !data/results/.gitkeep
 !data/models/.gitkeep
+!requirements.txt
 
 # Modelos
 *.pkl
