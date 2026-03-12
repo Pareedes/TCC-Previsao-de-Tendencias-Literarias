@@ -26,6 +26,7 @@ data/models/
 # Ignorar arquivos csv específicos caso queira manter as pastas
 *.csv
 *.txt
+*.pdf
 
 # Exceções (arquivos que queremos manter no repositório, caso decida ter algum placeholder)
 !data/raw/.gitkeep
