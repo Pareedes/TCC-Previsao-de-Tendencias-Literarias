@@ -1,9 +1,5 @@
 # ESTRUTURA PARA A TESE DO TCC: ANÁLISES E RESULTADOS OBTIDOS
 
-Este documento contém a estruturação formal sugerida para os capítulos finais do seu Trabalho de Conclusão de Curso (TCC). Ele abrange a Metodologia de Coleta, o Tratamento dos Dados, as Etapas de Treinamento, os Erros Matemáticos Tratados (Data Leakage) e os Resultados Empíricos.
-
-Recomendamos que você divida essas seções em seu arquivo `.pdf` (ou no Microsoft Word) e inclua os "PRINTS INDICADOS" utilizando os relatórios contidos na pasta `data/results/`.
-
 ---
 
 ## 4. METODOLOGIA E PROCEDIMENTOS (DADOS E PROCESSAMENTO)
