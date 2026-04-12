@@ -334,6 +334,9 @@ def menu_interativo():
         etapa_modelagem()
         print("\n🎉 Análise e modelagem finalizadas!")
 
+    elif opcao == "7":
+        etapa_comparacao()
+
     elif opcao == "0":
         print("\n  Saindo...")
     else:
@@ -349,6 +352,7 @@ def main():
     parser.add_argument("--processo", action="store_true", help="Executar processamento")
     parser.add_argument("--analise", action="store_true", help="Executar análise + modelos")
     parser.add_argument("--pipeline", action="store_true", help="Pipeline completo")
+    parser.add_argument("--comparar", action="store_true", help="Backtesting de previsões (Mês a Mês)")
     parser.add_argument("--start-id", type=int, default=1, help="ID inicial para coleta")
     parser.add_argument("--end-id", type=int, default=config.TARGET_BOOKS_COUNT, help="ID final para coleta")
 
@@ -369,6 +373,8 @@ def main():
         etapa_processamento()
         etapa_analise()
         etapa_modelagem()
+    elif args.comparar:
+        etapa_comparacao()
     else:
         menu_interativo()
 

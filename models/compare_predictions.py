@@ -54,17 +54,22 @@ class PredictionComparator:
         col_prev = "prev_ensemble" if "prev_ensemble" in df_prev.columns else \
                   ([c for c in df_prev.columns if c.startswith("prev_")][0] if any(c.startswith("prev_") for c in df_prev.columns) else "popularidade_prevista")
         
-        # A realidade atual é ditada pelo `popularidade_score` mais recente
-        if "popularidade_score" not in df_atual.columns:
-            logger.error("Coluna 'popularidade_score' não encontrada nos dados atuais.")
-            return None
+        # A realidade atual é ditada pelo `media_popularidade` mais recente
+        col_real = "media_popularidade"
+        if col_real not in df_atual.columns:
+            # Tentar fallback caso o schema tenha popularidade_score (como nos arquivos limpos)
+            if "popularidade_score" in df_atual.columns:
+                col_real = "popularidade_score"
+            else:
+                logger.error(f"Coluna de real popularidade não encontrada nos dados atuais. Colunas: {df_atual.columns}")
+                return None
 
         # Preparar DataFrames para o merge
         df_prev_clean = df_prev[["genero", col_prev, "tendencia", "data_previsao"]].copy()
         df_prev_clean = df_prev_clean.rename(columns={col_prev: "score_previsto"})
         
-        df_atual_clean = df_atual[["genero", "popularidade_score"]].copy()
-        df_atual_clean = df_atual_clean.rename(columns={"popularidade_score": "score_real"})
+        df_atual_clean = df_atual[["genero", col_real]].copy()
+        df_atual_clean = df_atual_clean.rename(columns={col_real: "score_real"})
 
         # Calcular ranking da previsão e ranking da realidade
         df_prev_clean["ranking_previsto"] = df_prev_clean["score_previsto"].rank(ascending=False, method="min")
