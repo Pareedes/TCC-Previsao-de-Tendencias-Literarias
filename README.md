@@ -192,7 +192,7 @@ Todos os arquivos gerados são salvos automaticamente dentro de `data/`:
 ## Documentação Adicional
 
 - **[`relatorio_tecnico.md`](./relatorio_tecnico.md)** — Relatório técnico completo: engenharia de features, metodologia dos modelos e fluxo de dados
-- **[`resultados.md`](./resultados_defesa_tcc.md)** — Resultados detalhados, interpretação das métricas e guia de apresentação para a banca
+- **[`resultados.md`](./resultados.md)** — Resultados detalhados, interpretação das métricas e guia de apresentação para a banca
 
 ---
 
