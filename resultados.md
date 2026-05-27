@@ -18,16 +18,17 @@ Este projeto utiliza um **dataset público (Public Domain License)** extraído d
 
 ## 2. Dataset
 
-| Atributo | Valor |
-|---|---|
-| **Fonte** | Dataset Público do Skoob — Public Domain License |
-| **Volume bruto** | ~12.000 livros |
-| **Após limpeza** | **9.742 livros** |
-| **Período coberto** | Publicações de 1900 a 2020 |
-| **Janela de análise temporal** | 2000–2020 |
-| **Idioma predominante** | Português (98,8%) |
+| Atributo                              | Valor                                              |
+| ------------------------------------- | -------------------------------------------------- |
+| **Fonte**                       | Dataset Público do Skoob — Public Domain License |
+| **Volume bruto**                | ~12.000 livros                                     |
+| **Após limpeza**               | **9.742 livros**                             |
+| **Período coberto**            | Publicações de 1900 a 2020                       |
+| **Janela de análise temporal** | 2000–2020                                         |
+| **Idioma predominante**         | Português (98,8%)                                 |
 
 ### Colunas principais utilizadas:
+
 - `leram` — nº de usuários que concluíram o livro
 - `avaliacao` — nº de avaliações na plataforma
 - `resenha` — nº de resenhas escritas
@@ -45,22 +46,22 @@ O modelo prediz um **Score de Popularidade composto** (escala 0–1), que combin
 popularidade_score = 0.5 × norm(leram) + 0.3 × norm(avaliacao) + 0.2 × norm(resenha)
 ```
 
-| Componente | Peso | Justificativa |
-|---|---|---|
-| `leram` | 50% | Alcance — quantas pessoas efetivamente concluíram o livro |
-| `avaliacao` | 30% | Engajamento ativo — quem avaliou o livro |
-| `resenha` | 20% | Engajamento qualitativo — quem escreveu sobre o livro |
+| Componente    | Peso | Justificativa                                               |
+| ------------- | ---- | ----------------------------------------------------------- |
+| `leram`     | 50%  | Alcance — quantas pessoas efetivamente concluíram o livro |
+| `avaliacao` | 30%  | Engajamento ativo — quem avaliou o livro                   |
+| `resenha`   | 20%  | Engajamento qualitativo — quem escreveu sobre o livro      |
 
 ### Distribuição do Score
 
-| Percentil | Score | Interpretação |
-|---|---|---|
+| Percentil     | Score | Interpretação                          |
+| ------------- | ----- | ---------------------------------------- |
 | 50% (mediana) | 0.038 | Metade dos livros tem score abaixo disso |
-| 75% | 0.145 | Top 25% |
-| 90% | 0.311 | Top 10% |
-| 95% | 0.458 | Top 5% |
-| 99% | 0.652 | Top 1% |
-| Máximo | 0.815 | Bestsellers absolutos |
+| 75%           | 0.145 | Top 25%                                  |
+| 90%           | 0.311 | Top 10%                                  |
+| 95%           | 0.458 | Top 5%                                   |
+| 99%           | 0.652 | Top 1%                                   |
+| Máximo       | 0.815 | Bestsellers absolutos                    |
 
 A distribuição é fortemente assimétrica à direita — a grande maioria dos livros tem popularidade baixa, e apenas ~1% atinge score acima de 0.65. Isso reflete fielmente a realidade do mercado editorial, onde poucos títulos concentram a maior parte dos leitores.
 
@@ -68,12 +69,12 @@ A distribuição é fortemente assimétrica à direita — a grande maioria dos 
 
 ## 4. Features do Modelo (30 features)
 
-| Categoria | Features | Nº |
-|---|---|---|
-| **Numéricas** | páginas, ano, rating, % leitoras mulheres, taxa de abandono, taxa de conclusão, razão desejo/leitores, tamanho da descrição | 8 |
-| **Gêneros (OHE)** | Top 20 gêneros como features binárias (0/1) | 20 |
-| **Editora** | Label encoding — top 10 editoras + "Outras" | 1 |
-| **NLP** | Score de sentimento da descrição | 1 |
+| Categoria                | Features                                                                                                                         | Nº |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Numéricas**     | páginas, ano, rating, % leitoras mulheres, taxa de abandono, taxa de conclusão, razão desejo/leitores, tamanho da descrição | 8   |
+| **Gêneros (OHE)** | Top 20 gêneros como features binárias (0/1)                                                                                    | 20  |
+| **Editora**        | Label encoding — top 10 editoras + "Outras"                                                                                     | 1   |
+| **NLP**            | Score de sentimento da descrição                                                                                               | 1   |
 
 ### Holdout Temporal
 
@@ -90,11 +91,11 @@ Essa abordagem simula o cenário real de uso: o modelo é treinado com dados his
 
 ## 5. Resultados dos Modelos de Machine Learning
 
-| Modelo | MAE | RMSE | R² | Interpretação |
-|---|---|---|---|---|
+| Modelo                                      | MAE              | RMSE             | R²              | Interpretação            |
+| ------------------------------------------- | ---------------- | ---------------- | ---------------- | -------------------------- |
 | **Random Forest** ← **Melhor** | **0.0591** | **0.0938** | **0.6986** | Explica ~70% da variância |
-| Árvore de Decisão | 0.0595 | 0.0956 | 0.6870 | Muito próximo do RF |
-| Regressão Linear | 0.1327 | 0.1640 | 0.0785 | Relação não é linear |
+| Árvore de Decisão                         | 0.0595           | 0.0956           | 0.6870           | Muito próximo do RF       |
+| Regressão Linear                           | 0.1327           | 0.1640           | 0.0785           | Relação não é linear   |
 
 ### Interpretação das Métricas
 
@@ -131,26 +132,27 @@ Um score de 0.07 representa o **percentil 63%** do dataset — o modelo prevê q
 
 ### Classificação dos 352 gêneros analisados
 
-| Categoria | Quantidade | Critério |
-|---|---|---|
-| 🟢 Ascensão | 60 | Crescimento ≥ 50% entre os períodos |
-| 🔵 Emergente | 221 | Surgiu apenas no período tardio (2013–2020) |
-| ⚪ Estagnação | 2 | Variação entre -20% e +50% |
-| 🔴 Declínio | 69 | Queda > 20% |
+| Categoria       | Quantidade | Critério                                     |
+| --------------- | ---------- | --------------------------------------------- |
+| 🟢 Ascensão    | 60         | Crescimento ≥ 50% entre os períodos         |
+| 🔵 Emergente    | 221        | Surgiu apenas no período tardio (2013–2020) |
+| ⚪ Estagnação | 2          | Variação entre -20% e +50%                  |
+| 🔴 Declínio    | 69         | Queda > 20%                                   |
 
 ### Gêneros em Ascensão (Top resultados)
 
-| Gênero | Crescimento de Leitores | Crescimento % | Tendência |
-|---|---|---|---|
-| **Jovem Adulto** | +82.967 | **+14.581%** | 🟢 Ascensão explosiva |
-| **Fantasia** | +67.130 | **+4.889%** | 🟢 Ascensão forte |
-| **Não-Ficção** | +42.431 | **+4.041%** | 🟢 Ascensão forte |
-| **Ficção Científica** | +21.958 | **+1.646%** | 🟢 Ascensão |
-| **Romance** | +199.180 | **+1.922%** | 🟢 Maior volume absoluto |
+| Gênero                        | Crescimento de Leitores | Crescimento %      | Tendência               |
+| ------------------------------ | ----------------------- | ------------------ | ------------------------ |
+| **Jovem Adulto**         | +82.967                 | **+14.581%** | 🟢 Ascensão explosiva   |
+| **Fantasia**             | +67.130                 | **+4.889%**  | 🟢 Ascensão forte       |
+| **Não-Ficção**        | +42.431                 | **+4.041%**  | 🟢 Ascensão forte       |
+| **Ficção Científica** | +21.958                 | **+1.646%**  | 🟢 Ascensão             |
+| **Romance**              | +199.180                | **+1.922%**  | 🟢 Maior volume absoluto |
 
 ### Contextualização dos resultados
 
 **Jovem Adulto +14.581%** é justificado historicamente:
+
 - 2012: Jogos Vorazes / Divergente no auge no Brasil
 - 2014: A Culpa é das Estrelas (best-seller mundial)
 - 2016–2019: consolidação do segmento YA nas editoras brasileiras
