@@ -12,7 +12,7 @@ A capacidade preditiva do projeto fornece insights acionáveis para autores, edi
 
 ## Fonte de Dados
 
-O projeto utiliza um **dataset público com licença Public Domain** extraído do Skoob, disponível abertamente para fins acadêmicos e de pesquisa. O uso desse dataset é **eticamente rigoroso e academicamente válido**, em plena conformidade com os Termos de Uso da plataforma.
+O projeto utiliza um **dataset público com licença Public Domain** extraído do Skoob, disponível na plataforma Kaggle.
 
 | Atributo                     | Valor                                              |
 | ---------------------------- | -------------------------------------------------- |
