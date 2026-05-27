@@ -1,13 +1,17 @@
 """
-Módulo de processamento de linguagem natural (NLP) para resenhas.
-Análise de sentimento, extração de keywords e temas recorrentes.
+Módulo de processamento de linguagem natural (NLP).
+
+Utilizado para análise de sentimento e extração de palavras-chave
+das descrições/sinopses dos livros no dataset público do Skoob.
+
+Após a reestruturação do projeto (pivot de scraping → CSV),
+este módulo opera sobre a coluna 'descricao' do dataset,
+não mais sobre resenhas individuais de usuários.
 """
 
 import re
 import logging
 import os
-import pandas as pd
-import numpy as np
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -26,10 +30,7 @@ def _setup_nltk():
         return
 
     import nltk
-    resources = [
-        "punkt", "punkt_tab", "stopwords", "vader_lexicon",
-        "rslp",  # Stemmer para português
-    ]
+    resources = ["punkt", "punkt_tab", "stopwords"]
     for resource in resources:
         try:
             nltk.data.find(f"tokenizers/{resource}")
@@ -37,24 +38,19 @@ def _setup_nltk():
             try:
                 nltk.data.find(f"corpora/{resource}")
             except LookupError:
-                try:
-                    nltk.data.find(f"sentiment/{resource}")
-                except LookupError:
-                    logger.info(f"Baixando recurso NLTK: {resource}")
-                    nltk.download(resource, quiet=True)
+                logger.info(f"Baixando recurso NLTK: {resource}")
+                nltk.download(resource, quiet=True)
 
     _nltk_ready = True
 
 
 class NLPProcessor:
     """
-    Processador de NLP para resenhas de livros do Skoob.
+    Processador de NLP para descrições de livros do Skoob.
 
     Funcionalidades:
-    - Tokenização e limpeza de texto
-    - Remoção de stopwords (português)
-    - Análise de sentimento simplificada
-    - Extração de palavras-chave mais frequentes
+    - Análise de sentimento das sinopses (escala -1.0 a 1.0)
+    - Extração de palavras-chave mais frequentes (com remoção de stopwords PT-BR)
     """
 
     # Palavras de sentimento positivo em português
@@ -97,58 +93,16 @@ class NLPProcessor:
                 "me", "te", "lhe", "eu", "ele", "ela", "nós", "eles", "elas",
             }
 
-    def process_reviews(
-        self, input_file: str = None, output_file: str = None
-    ) -> pd.DataFrame:
-        """
-        Processa resenhas com NLP: sentimento, keywords, etc.
-
-        Args:
-            input_file: CSV de resenhas limpas
-            output_file: CSV com resultados do NLP
-
-        Returns:
-            DataFrame com dados de NLP adicionados
-        """
-        if input_file is None:
-            input_file = config.CLEANED_REVIEWS_FILE
-        if output_file is None:
-            output_file = config.NLP_RESULTS_FILE
-
-        logger.info(f"Processando resenhas com NLP: {input_file}")
-
-        df = pd.read_csv(input_file, encoding="utf-8")
-
-        # Análise de sentimento
-        df["sentimento_score"] = df["texto"].fillna("").apply(self.analyze_sentiment)
-        df["sentimento_label"] = df["sentimento_score"].apply(
-            lambda x: "Positivo" if x > 0.1 else ("Negativo" if x < -0.1 else "Neutro")
-        )
-
-        # Extração de keywords
-        df["keywords"] = df["texto"].fillna("").apply(self.extract_keywords)
-
-        # Comprimento do texto
-        df["texto_comprimento"] = df["texto"].fillna("").str.len()
-        df["texto_palavras"] = df["texto"].fillna("").str.split().str.len()
-
-        # Salvar
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        df.to_csv(output_file, index=False, encoding="utf-8")
-        logger.info(
-            f"  NLP concluído: {len(df)} resenhas processadas -> {output_file}"
-        )
-
-        return df
-
     def analyze_sentiment(self, text: str) -> float:
         """
-        Análise de sentimento simplificada em português.
+        Análise de sentimento de uma descrição de livro.
 
-        Conta ocorrências de palavras positivas vs negativas.
+        Conta ocorrências de palavras positivas vs negativas
+        num léxico curado em português.
 
         Returns:
-            Score entre -1.0 (negativo) e 1.0 (positivo)
+            Score entre -1.0 (muito negativo) e 1.0 (muito positivo).
+            0.0 quando não há palavras de sentimento reconhecidas.
         """
         if not text:
             return 0.0
@@ -162,55 +116,40 @@ class NLPProcessor:
         if total == 0:
             return 0.0
 
-        score = (positive_count - negative_count) / total
-        return round(score, 3)
+        return round((positive_count - negative_count) / total, 3)
 
     def extract_keywords(self, text: str, top_n: int = 10) -> str:
         """
-        Extrai as palavras-chave mais relevantes de um texto.
+        Extrai as palavras-chave mais relevantes de uma descrição.
 
-        Remove stopwords e retorna as palavras mais frequentes.
+        Pipeline:
+        1. Tokenização (regex, apenas palavras com 3+ letras)
+        2. Remoção de stopwords PT-BR (NLTK ou fallback manual)
+        3. Contagem de frequência
+        4. Retorna os top_n termos mais frequentes
 
         Returns:
-            String com keywords separadas por vírgula
+            String com keywords separadas por vírgula.
         """
         if not text:
             return ""
 
-        # Tokenizar
+        # Tokenizar — apenas palavras com 3+ letras, incluindo acentos
         words = re.findall(r"\b[a-záàâãéèêíïóôõöúçñ]{3,}\b", text.lower())
 
         # Remover stopwords
         filtered = [w for w in words if w not in self.stopwords_pt]
 
-        # Contar frequência
+        # Contar frequência e retornar top N
         from collections import Counter
         freq = Counter(filtered)
-
-        # Top N
         top = freq.most_common(top_n)
-        return ", ".join([word for word, count in top])
-
-    def get_sentiment_by_book(self, nlp_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Agrupa sentimento por livro.
-
-        Returns:
-            DataFrame com sentimento médio por book_id
-        """
-        grouped = nlp_df.groupby("book_id").agg(
-            sentimento_medio=("sentimento_score", "mean"),
-            sentimento_mediana=("sentimento_score", "median"),
-            sentimento_std=("sentimento_score", "std"),
-            total_resenhas_nlp=("sentimento_score", "count"),
-            prop_positivas=("sentimento_label", lambda x: (x == "Positivo").mean()),
-            prop_negativas=("sentimento_label", lambda x: (x == "Negativo").mean()),
-            media_comprimento=("texto_comprimento", "mean"),
-        ).reset_index()
-
-        return grouped
+        return ", ".join([word for word, _ in top])
 
 
 if __name__ == "__main__":
-    print("NLPProcessor - Módulo de processamento de linguagem natural")
-    print("Use main.py para executar o pipeline completo.")
+    logging.basicConfig(level=logging.INFO)
+    nlp = NLPProcessor()
+    sample = "Um livro incrível e emocionante sobre a vida e o amor, muito envolvente."
+    print(f"Sentimento: {nlp.analyze_sentiment(sample)}")
+    print(f"Keywords:   {nlp.extract_keywords(sample)}")

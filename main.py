@@ -1,382 +1,423 @@
 """
-Pipeline principal do projeto TCC.
-Previsão de Tendências Literárias com Base em Dados do Skoob.
+Pipeline principal — Previsão de Tendências Literárias (Skoob)
+IFTM — Engenharia de Computação | TCC — Gabriel Paredes Ferreira
 
-Autor: Gabriel Paredes Ferreira
-IFTM - Campus Avançado Uberaba Parque Tecnológico
-Engenharia de Computação
-
-Uso:
-    python main.py              # Menu interativo
-    python main.py --coleta     # Executar apenas coleta
-    python main.py --pipeline   # Pipeline completo
-    python main.py --analise    # Apenas análise e modelos (requer dados coletados)
+Fonte de dados: Dataset Público do Skoob (~12.000 livros, Public Domain)
+Objetivos:
+  1. Prever a popularidade de livros com base em características e gênero
+  2. Identificar gêneros literários em crescimento ao longo de 2000–2020
 """
 
-import sys
 import os
+import sys
 import logging
 import argparse
+import time
+from datetime import datetime
 
-# Configuração base
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, BASE_DIR)
-
-import config
-
-# Configuração de logging
+# ---------------------------------------------------------------------------
+# Configurar logging antes de qualquer import do projeto
+# ---------------------------------------------------------------------------
+LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    format=LOG_FORMAT,
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(
-            os.path.join(config.BASE_DIR, "pipeline.log"),
-            encoding="utf-8",
-        ),
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("pipeline.log", encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("Main")
 
+# ---------------------------------------------------------------------------
+# Imports do projeto
+# ---------------------------------------------------------------------------
+import config
 
-def banner():
-    """Exibe banner do projeto."""
-    print("\n" + "=" * 70)
-    print("  📚 PREVISÃO DE TENDÊNCIAS LITERÁRIAS COM BASE EM DADOS DO SKOOB")
-    print("  ─────────────────────────────────────────────────────────────────")
-    print("  Gabriel Paredes Ferreira | IFTM | Engenharia de Computação")
-    print("=" * 70)
-
-
-def etapa_coleta(start_id: int = 1, end_id: int = 5000):
-    """
-    Etapa 1: Coleta de dados do Skoob via web scraping.
-
-    Coleta dados de livros e resenhas, salvando em data/raw/.
-    """
-    from scraper.book_scraper import BookScraper
-    from scraper.review_scraper import ReviewScraper
-
-    print("\n📥 ETAPA 1: COLETA DE DADOS DO SKOOB")
-    print("-" * 50)
-
-    # 1.1 Coleta de livros
-    print(f"\n🔍 Coletando dados de livros (IDs {start_id} a {end_id})...")
-    print("   Isso pode levar várias horas dependendo do range de IDs.")
-    print("   Os dados são salvos periodicamente em data/raw/books_raw.csv")
-    print()
-
-    with BookScraper() as scraper:
-        books = scraper.scrape_range(start_id, end_id)
-
-    print(f"\n✅ {len(books)} livros coletados e salvos!")
-
-    # 1.2 Coleta de resenhas (top livros)
-    if books:
-        # Pegar IDs dos livros com mais leitores para coletar resenhas
-        import pandas as pd
-        df = pd.read_csv(config.RAW_BOOKS_FILE, encoding="utf-8")
-        if "total_avaliacoes" in df.columns:
-            top_ids = df.nlargest(200, "total_avaliacoes")["book_id"].tolist()
-        else:
-            top_ids = df["book_id"].head(200).tolist()
-
-        print(f"\n📝 Coletando resenhas para {len(top_ids)} livros mais populares...")
-        with ReviewScraper() as rscraper:
-            reviews = rscraper.scrape_reviews_for_books(top_ids, max_reviews_per_book=20)
-        print(f"✅ {len(reviews)} resenhas coletadas!")
-
-    return books
+from processing.data_loader import DataLoader
+from processing.nlp_processor import NLPProcessor
+from models.feature_engineering import FeatureEngineer
+from models.train import ModelTrainer
+from models.evaluate import ModelEvaluator
+from analysis.genre_trends import GenreTrendAnalyzer
+from analysis.visualizations import Visualizations
 
 
-def etapa_processamento():
-    """
-    Etapa 2: Tratamento e processamento dos dados.
+# ===========================================================================
+# FUNÇÕES DE ETAPA
+# ===========================================================================
 
-    Limpeza, enriquecimento e NLP nas resenhas.
-    """
-    from processing.data_cleaner import DataCleaner
-    from processing.data_enricher import DataEnricher
-    from processing.nlp_processor import NLPProcessor
+def etapa_carregar(args):
+    """Etapa 1: Carrega e limpa o dataset CSV público."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 1 — CARGA E LIMPEZA DO DATASET")
+    logger.info("=" * 60)
 
-    print("\n🔧 ETAPA 2: PROCESSAMENTO E TRATAMENTO DE DADOS")
-    print("-" * 50)
+    loader = DataLoader()
+    df = loader.load_and_clean()
+    resumo = loader.get_summary(df)
 
-    # 2.1 Limpeza de dados
-    print("\n🧹 Limpando dados de livros...")
-    cleaner = DataCleaner()
-    df_books = cleaner.clean_books()
-    print(f"   ✅ {len(df_books)} livros após limpeza")
+    logger.info("\nRESUMO DO DATASET:")
+    for k, v in resumo.items():
+        logger.info(f"  {k}: {v}")
 
-    # 2.2 Limpeza de resenhas
-    if os.path.exists(config.RAW_REVIEWS_FILE):
-        print("\n🧹 Limpando resenhas...")
-        df_reviews = cleaner.clean_reviews()
-        print(f"   ✅ {len(df_reviews)} resenhas após limpeza")
-
-        # 2.3 NLP nas resenhas
-        print("\n🧠 Processando resenhas com NLP...")
-        nlp = NLPProcessor()
-        df_nlp = nlp.process_reviews()
-        print(f"   ✅ {len(df_nlp)} resenhas processadas com NLP")
-
-    # 2.4 Enriquecimento de dados
-    print("\n📊 Enriquecendo dados com métricas derivadas...")
-    enricher = DataEnricher()
-    df_enriched = enricher.enrich_books()
-    print(f"   ✅ {len(df_enriched)} livros enriquecidos")
-
-    # 2.5 Gerar tendências por gênero
-    print("\n📈 Gerando tendências por gênero...")
-    trends = enricher.generate_genre_trends(df_enriched)
-    print(f"   ✅ {len(trends)} gêneros analisados")
-
-    return df_enriched
+    return df
 
 
-def etapa_analise():
-    """
-    Etapa 3: Análise descritiva e visualizações.
-    """
-    from analysis.descriptive import DescriptiveAnalysis
-    from analysis.visualizations import Visualizations
+def etapa_nlp(args):
+    """Etapa 2 (opcional): NLP nas descrições dos livros."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 2 — PROCESSAMENTO NLP DAS DESCRIÇÕES")
+    logger.info("=" * 60)
 
-    print("\n📊 ETAPA 3: ANÁLISE DESCRITIVA E VISUALIZAÇÕES")
-    print("-" * 50)
+    import pandas as pd
+    import re
 
-    # 3.1 Análise descritiva
-    print("\n📋 Gerando relatório descritivo...")
-    analyzer = DescriptiveAnalysis()
-    report = analyzer.run_full_analysis()
+    df = pd.read_csv(config.CLEANED_BOOKS_FILE, encoding="utf-8")
 
-    # 3.2 Visualizações
-    print("\n🎨 Gerando gráficos...")
+    if "descricao" not in df.columns or df["descricao"].dropna().empty:
+        logger.warning("Coluna 'descricao' não encontrada ou vazia. Pulando NLP.")
+        return
+
+    nlp = NLPProcessor()
+
+    logger.info(f"Calculando sentimento para {len(df):,} descrições...")
+    df["sentimento_score"] = df["descricao"].fillna("").apply(nlp.analyze_sentiment)
+    df["descricao_keywords"] = df["descricao"].fillna("").apply(nlp.extract_keywords)
+
+    out = df[["titulo", "autor", "sentimento_score", "descricao_keywords"]]
+    os.makedirs(os.path.dirname(config.NLP_RESULTS_FILE), exist_ok=True)
+    out.to_csv(config.NLP_RESULTS_FILE, index=False, encoding="utf-8")
+
+    logger.info(f"  NLP concluído → {config.NLP_RESULTS_FILE}")
+    logger.info(f"  Sentimento médio: {df['sentimento_score'].mean():.3f}")
+
+
+def etapa_analise(args):
+    """Etapa 3: Análise descritiva e visualizações."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 3 — ANÁLISE DESCRITIVA E VISUALIZAÇÕES")
+    logger.info("=" * 60)
+
     viz = Visualizations()
     viz.generate_all()
 
-    print(f"   ✅ Gráficos salvos em: {config.RESULTS_DIR}")
-
-    return report
+    logger.info(f"Gráficos salvos em: {config.RESULTS_DIR}")
 
 
-def etapa_modelagem():
-    """
-    Etapa 4: Modelagem preditiva com Machine Learning.
-    """
-    from models.feature_engineering import FeatureEngineer
-    from models.train import ModelTrainer
-    from models.evaluate import ModelEvaluator
-    from models.predict import TrendPredictor
-    from analysis.visualizations import Visualizations
-    from sklearn.model_selection import train_test_split
+def etapa_tendencias(args):
+    """Etapa 4: Análise temporal de tendências de gêneros (2000–2020)."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 4 — ANÁLISE TEMPORAL DE TENDÊNCIAS DE GÊNEROS")
+    logger.info("=" * 60)
 
-    print("\n🤖 ETAPA 4: MODELAGEM PREDITIVA")
-    print("-" * 50)
+    analyzer = GenreTrendAnalyzer()
+    df_tend = analyzer.analisar()
 
-    # 4.1 Engenharia de features
-    print("\n⚙️  Criando features para ML...")
+    # Gerar gráficos de tendências
+    viz = Visualizations()
+
+    if analyzer.df_anual is not None:
+        viz.plot_genre_timeline(analyzer.df_anual)
+        viz.plot_growth_heatmap(analyzer.df_anual)
+
+    viz.plot_genre_growth_bar(df_tend)
+
+    logger.info("\nRESUMO DAS TENDÊNCIAS:")
+    for tendencia in ["Ascensão", "Emergente", "Estagnação", "Declínio"]:
+        count = (df_tend.get("tendencia", []) == tendencia).sum()
+        logger.info(f"  {tendencia}: {count} gêneros")
+
+    return df_tend
+
+
+def etapa_modelo(args):
+    """Etapa 5: Treinamento e avaliação dos modelos de ML."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 5 — TREINAMENTO E AVALIAÇÃO DOS MODELOS DE ML")
+    logger.info("=" * 60)
+
+    # Feature Engineering
     fe = FeatureEngineer()
-    nlp_file = config.NLP_RESULTS_FILE if os.path.exists(config.NLP_RESULTS_FILE) else None
-    features_df = fe.create_genre_features(nlp_file=nlp_file)
-    X, y, feature_names, genre_names = fe.prepare_train_test(features_df)
+    temporal = not getattr(args, "sem_holdout_temporal", False)
 
-    print(f"   Features: {X.shape[1]} | Amostras: {X.shape[0]}")
+    X_train, X_test, y_train, y_test, feature_names, df_train, df_test = (
+        fe.preparar_features(temporal_split=temporal)
+    )
 
-    # 4.2 Split treino/teste
-    if len(X) >= 10:
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=config.TEST_SIZE, random_state=config.RANDOM_STATE
-        )
-    else:
-        # Poucos dados: usar todos para treino e teste
-        X_train, X_test = X, X
-        y_train, y_test = y, y
-        print("   ⚠️  Poucos dados: usando mesmo conjunto para treino e teste")
+    logger.info(
+        f"Features: {len(feature_names)} | "
+        f"Treino: {len(X_train):,} | Teste: {len(X_test):,}"
+    )
 
-    # 4.3 Treinamento
-    print("\n🏋️  Treinando modelos...")
+    # Treino
     trainer = ModelTrainer()
-    trainer.train_all_models(X_train, y_train, feature_names)
+    trainer.train_all_models(X_train, y_train, feature_names=feature_names)
+    trainer.save_models()
 
-    # 4.4 Avaliação
-    print("\n📏 Avaliando modelos...")
+    # Avaliação
     evaluator = ModelEvaluator()
     results = evaluator.evaluate_all(trainer, X_test, y_test)
 
-    # 4.5 Validação cruzada (se dados suficientes)
-    cv_results = {}
-    if len(X) >= 5:
-        cv_results = evaluator.cross_validate(trainer, X, y)
+    logger.info("\n" + "=" * 60)
+    logger.info("RESULTADOS DOS MODELOS")
+    logger.info("=" * 60)
+    logger.info(f"{'Modelo':<25} {'MAE':>8} {'RMSE':>8} {'R²':>8} {'CV R²':>8}")
+    logger.info("-" * 60)
 
-    # 4.6 Imprimir comparação
-    evaluator.print_comparison(results, cv_results)
-    evaluator.save_results(results, cv_results)
+    for nome, metricas in sorted(results.items(), key=lambda x: -x[1].get("R2", 0)):
+        logger.info(
+            f"{nome:<25} "
+            f"{metricas.get('MAE', 0):>8.4f} "
+            f"{metricas.get('RMSE', 0):>8.4f} "
+            f"{metricas.get('R2', 0):>8.4f} "
+            f"{metricas.get('CV_R2_mean', 0):>8.4f}"
+        )
 
-    # 4.7 Feature importance
-    print("\n📊 Importância das features:")
-    importances = trainer.get_feature_importance()
-    for model_name, imp_df in importances.items():
-        print(f"\n  {model_name}:")
-        for _, row in imp_df.head(5).iterrows():
-            col = "importance" if "importance" in row else "coefficient"
-            print(f"    {row['feature']:<30} {row[col]:.4f}")
-
-    # 4.8 Salvar modelos
-    trainer.save_models()
-    print(f"\n   💾 Modelos salvos em: {config.MODELS_DIR}")
-
-    # 4.9 Gerar visualizações de modelos
+    # Gráficos dos modelos
     viz = Visualizations()
     viz.plot_model_comparison(results)
 
-    predictions_all = trainer.predict_all(X_test)
-    best_model = evaluator.get_best_model(results)
-    viz.plot_predictions_vs_actual(y_test, predictions_all[best_model], best_model)
+    # Gráfico predição vs real para o melhor modelo
+    melhor = max(results, key=lambda m: results[m].get("R2", 0))
+    y_pred_melhor = trainer.predict(melhor, X_test)
+    viz.plot_predictions_vs_actual(y_test, y_pred_melhor, melhor)
 
-    # 4.10 Predição de tendências
-    print("\n🔮 Gerando previsão de tendências...")
-    predictor = TrendPredictor()
-    predictor.trainer = trainer
-    predictions = predictor.predict_genre_trends(features_df)
-    predictor.generate_report(predictions)
+    # Feature importance
+    importances = trainer.get_feature_importance()
+    viz.plot_feature_importance(importances)
 
-    return results, predictions
+    # Salvar resultados como CSV
+    import pandas as pd
+    rows = [{"Modelo": k, **v} for k, v in results.items()]
+    pd.DataFrame(rows).to_csv(config.MODEL_RESULTS_FILE, index=False)
+    logger.info(f"\nResultados salvos: {config.MODEL_RESULTS_FILE}")
+
+    return trainer, fe, results
 
 
-def etapa_comparacao():
-    """
-    Etapa Extra: Validação de previsões com dados atuais (Backtesting).
-    """
-    from models.compare_predictions import PredictionComparator
-    print("\n🎯 ETAPA: VALIDAÇÃO DE PREVISÕES")
-    print("-" * 50)
-    
-    comp = PredictionComparator()
-    arquivos = comp.listar_previsoes_historicas()
-    
-    if not arquivos:
-        print("\n  ❌ Nenhum histórico de previsão encontrado em data/results/history/")
-        print("  Execute a etapa de modelagem pelo menos uma vez para gerar histórico.")
-        return
-        
-    print("\n  Previsões históricas disponíveis:")
-    for i, arq in enumerate(arquivos[:10]): # Mostrar até 10
-        nome = os.path.basename(arq)
-        print(f"  [{i+1}] {nome}")
-        
-    print(f"  [{len(arquivos[:10])+1}] Voltar")
-    
-    try:
-        esc = int(input("\n  Escolha a previsão para comparar com a realidade ATUAL: ").strip())
-        if esc == len(arquivos[:10]) + 1:
+def etapa_prever_hipotetico(trainer=None, fe=None, input_data=None):
+    """Etapa 6 (interativa): Prevê popularidade de um livro hipotético."""
+    logger.info("=" * 60)
+    logger.info("ETAPA 6 — PREVISÃO DE LIVRO HIPOTÉTICO")
+    logger.info("=" * 60)
+
+    # Carregar modelos se não fornecidos
+    if trainer is None:
+        trainer = ModelTrainer()
+        try:
+            trainer.load_models()
+        except Exception:
+            logger.error("Modelos não encontrados. Execute a etapa de treinamento primeiro.")
             return
-        if 1 <= esc <= len(arquivos[:10]):
-            arquivo_escolhido = arquivos[esc-1]
-            print(f"\n  Comparando {os.path.basename(arquivo_escolhido)} com os gêneros atuais...\n")
-            comp.comparar(arquivo_escolhido)
-        else:
-            print("  ❌ Opção inválida.")
-    except (ValueError, EOFError, KeyboardInterrupt):
-        print("  Operação cancelada.")
+
+    if fe is None:
+        fe = FeatureEngineer()
+        try:
+            fe.preparar_features()  # Reprocessa para recriar mapeamentos internos
+        except Exception:
+            logger.error("Erro ao carregar features. Execute a etapa de treinamento primeiro.")
+            return
+
+    if input_data:
+        genero = input_data.get("genero", "Romance")
+        paginas = input_data.get("paginas", 300)
+        ano = input_data.get("ano", 2024)
+        rating = input_data.get("rating", 4.0)
+        descricao = input_data.get("descricao", "")
+        editora = input_data.get("editora", "")
+    else:
+        print("\n" + "=" * 60)
+        print("  PREVISÃO DE POPULARIDADE — LIVRO HIPOTÉTICO")
+        print("=" * 60)
+        print("Informe as características do livro para prever sua popularidade:")
+        print(f"  Generos disponíveis: {', '.join(fe.top_generos[:10])}")
+        print()
+
+        genero = input("  Gênero principal: ").strip() or "Romance"
+        paginas_str = input("  Número de páginas [300]: ").strip()
+        paginas = int(paginas_str) if paginas_str.isdigit() else 300
+        ano_str = input("  Ano de publicação [2024]: ").strip()
+        ano = int(ano_str) if ano_str.isdigit() else 2024
+        rating_str = input("  Rating esperado 0-5 [4.0]: ").strip()
+        try:
+            rating = float(rating_str) if rating_str else 4.0
+        except ValueError:
+            rating = 4.0
+        descricao = input("  Breve descrição/sinopse (opcional): ").strip()
+        editora = input("  Editora (Rocco/Intrínseca/Sextante/Planeta - Enter p/ pular): ").strip()
+
+
+
+    resultados = fe.prever_livro_hipotetico(
+        trainer=trainer,
+        genero=genero,
+        paginas=paginas,
+        ano=ano,
+        rating=rating,
+        editora=editora,
+        descricao=descricao,
+    )
+
+    # Separar metadados das previsões por modelo
+    livros_similares = resultados.pop("_livros_similares", [])
+    score_medio = resultados.pop("_score_medio", 0)
+
+    print("\n" + "─" * 65)
+    print(f"  LIVRO: {genero} | {paginas}p | {ano} | Rating {rating:.1f}"
+          + (f" | {editora}" if editora else ""))
+    print("─" * 65)
+    print(f"  {'Modelo':<25} {'Score':>8}  {'Pos. no dataset':>15}  Classificação")
+    print("  " + "-" * 62)
+    for modelo, pred in resultados.items():
+        print(
+            f"  {modelo:<25} "
+            f"{pred['popularidade_score']:>8.4f}  "
+            f"Top {pred['top_pct']:>5.1f}% ({pred['percentil']:.0f}° pct)  "
+            f"{pred['classificacao']}"
+        )
+    print("─" * 65)
+    print(f"  Score medio previsto: {score_medio:.4f}")
+
+    if livros_similares:
+        print(f"\n  Livros reais do Skoob com popularidade similar:")
+        for liv in livros_similares:
+            print(f"    - {liv['titulo'][:48]:<48} | score real: {liv['score_real']:.4f} | {liv['leram']} leram")
+    print()
+
+
+def etapa_pipeline_completo(args):
+    """Executa todas as etapas em sequência."""
+    inicio = time.time()
+    logger.info("\n" + "█" * 60)
+    logger.info("  PIPELINE COMPLETO — PREVISÃO DE TENDÊNCIAS LITERÁRIAS")
+    logger.info("█" * 60 + "\n")
+
+    etapa_carregar(args)
+    etapa_nlp(args)
+    etapa_analise(args)
+    etapa_tendencias(args)
+    trainer, fe, results = etapa_modelo(args)
+
+    elapsed = time.time() - inicio
+    logger.info(f"\n✓ Pipeline concluído em {elapsed:.1f}s")
+    return trainer, fe
+
+
+# ===========================================================================
+# MENU INTERATIVO
+# ===========================================================================
+
+MENU = """
+╔══════════════════════════════════════════════════════════════╗
+║   PREVISÃO DE TENDÊNCIAS LITERÁRIAS — SKOOB DATASET         ║
+║   IFTM | Engenharia de Computação | TCC 2026                ║
+╠══════════════════════════════════════════════════════════════╣
+║  [1] Carregar e limpar dataset (dados.csv)                  ║
+║  [2] Processamento NLP das descrições                       ║
+║  [3] Análise descritiva e gráficos                          ║
+║  [4] Análise temporal de tendências (2000–2020)             ║
+║  [5] Treinar e avaliar modelos de ML                        ║
+║  [6] Prever popularidade de livro hipotético                ║
+║  [7] Executar pipeline completo                             ║
+║  [0] Sair                                                   ║
+╚══════════════════════════════════════════════════════════════╝
+"""
 
 
 def menu_interativo():
-    """Menu interativo para execução do pipeline."""
-    banner()
+    """Loop do menu interativo."""
+    trainer_cache = None
+    fe_cache = None
 
-    print("\n  Escolha uma opção:\n")
-    print("  [1] 📥 Coleta de dados (web scraping do Skoob)")
-    print("  [2] 🔧 Processamento de dados")
-    print("  [3] 📊 Análise descritiva + visualizações")
-    print("  [4] 🤖 Modelagem preditiva (ML)")
-    print("  [5] 🚀 Pipeline completo (todas as etapas)")
-    print("  [6] 📈 Apenas análise + modelos (requer dados já coletados)")
-    print("  [7] 🎯 Validar previsões passadas (Backtesting)")
-    print("  [0] ❌ Sair")
-    print()
-
-    try:
+    while True:
+        print(MENU)
         opcao = input("  Opção: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print("\n  Saindo...")
-        return
 
-    if opcao == "1":
-        try:
-            start = int(input("  ID inicial (padrão: 1): ").strip() or "1")
-            end = int(input("  ID final (padrão: 5000): ").strip() or "5000")
-        except ValueError:
-            start, end = 1, 5000
-        etapa_coleta(start, end)
+        args = argparse.Namespace(sem_holdout_temporal=False)
 
-    elif opcao == "2":
-        etapa_processamento()
+        if opcao == "0":
+            print("\n  Encerrando. Até logo!\n")
+            break
+        elif opcao == "1":
+            etapa_carregar(args)
+        elif opcao == "2":
+            etapa_nlp(args)
+        elif opcao == "3":
+            etapa_analise(args)
+        elif opcao == "4":
+            etapa_tendencias(args)
+        elif opcao == "5":
+            trainer_cache, fe_cache, _ = etapa_modelo(args)
+        elif opcao == "6":
+            etapa_prever_hipotetico(trainer_cache, fe_cache)
+        elif opcao == "7":
+            trainer_cache, fe_cache = etapa_pipeline_completo(args)
+        else:
+            print("  Opção inválida. Tente novamente.")
 
-    elif opcao == "3":
-        etapa_analise()
 
-    elif opcao == "4":
-        etapa_modelagem()
+# ===========================================================================
+# CLI
+# ===========================================================================
 
-    elif opcao == "5":
-        print("\n🚀 Executando pipeline completo...")
-        etapa_coleta(1, 5000)
-        etapa_processamento()
-        etapa_analise()
-        etapa_modelagem()
-        print("\n🎉 Pipeline completo finalizado!")
-
-    elif opcao == "6":
-        print("\n📈 Executando análise + modelos com dados existentes...")
-        etapa_processamento()
-        etapa_analise()
-        etapa_modelagem()
-        print("\n🎉 Análise e modelagem finalizadas!")
-
-    elif opcao == "7":
-        etapa_comparacao()
-
-    elif opcao == "0":
-        print("\n  Saindo...")
-    else:
-        print("\n  ❌ Opção inválida!")
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Pipeline de Previsão de Tendências Literárias — Skoob Dataset"
+    )
+    parser.add_argument("--carregar", action="store_true",
+                        help="Etapa 1: Carregar e limpar dataset")
+    parser.add_argument("--nlp", action="store_true",
+                        help="Etapa 2: Processamento NLP")
+    parser.add_argument("--analise", action="store_true",
+                        help="Etapa 3: Análise descritiva e gráficos")
+    parser.add_argument("--tendencias", action="store_true",
+                        help="Etapa 4: Análise temporal de gêneros")
+    parser.add_argument("--modelo", action="store_true",
+                        help="Etapa 5: Treinar e avaliar modelos")
+    parser.add_argument("--prever", action="store_true",
+                        help="Etapa 6: Prever livro hipotético (interativo)")
+    parser.add_argument("--pipeline", action="store_true",
+                        help="Executar pipeline completo")
+    parser.add_argument("--sem-holdout-temporal", action="store_true",
+                        dest="sem_holdout_temporal",
+                        help="Usar split aleatório em vez do holdout temporal")
+    return parser.parse_args()
 
 
 def main():
-    """Entry point do pipeline."""
-    parser = argparse.ArgumentParser(
-        description="Previsão de Tendências Literárias - Pipeline"
-    )
-    parser.add_argument("--coleta", action="store_true", help="Executar coleta de dados")
-    parser.add_argument("--processo", action="store_true", help="Executar processamento")
-    parser.add_argument("--analise", action="store_true", help="Executar análise + modelos")
-    parser.add_argument("--pipeline", action="store_true", help="Pipeline completo")
-    parser.add_argument("--comparar", action="store_true", help="Backtesting de previsões (Mês a Mês)")
-    parser.add_argument("--start-id", type=int, default=1, help="ID inicial para coleta")
-    parser.add_argument("--end-id", type=int, default=config.TARGET_BOOKS_COUNT, help="ID final para coleta")
+    args = parse_args()
 
-    args = parser.parse_args()
+    # Se nenhum argumento CLI, abre menu interativo
+    qualquer_flag = any([
+        args.carregar, args.nlp, args.analise,
+        args.tendencias, args.modelo, args.prever, args.pipeline,
+    ])
 
-    banner()
-
-    if args.pipeline:
-        etapa_coleta(args.start_id, args.end_id)
-        etapa_processamento()
-        etapa_analise()
-        etapa_modelagem()
-    elif args.coleta:
-        etapa_coleta(args.start_id, args.end_id)
-    elif args.processo:
-        etapa_processamento()
-    elif args.analise:
-        etapa_processamento()
-        etapa_analise()
-        etapa_modelagem()
-    elif args.comparar:
-        etapa_comparacao()
-    else:
+    if not qualquer_flag:
         menu_interativo()
+        return
+
+    # Modo CLI
+    if args.pipeline:
+        etapa_pipeline_completo(args)
+        return
+
+    trainer_ref = None
+    fe_ref = None
+
+    if args.carregar:
+        etapa_carregar(args)
+    if args.nlp:
+        etapa_nlp(args)
+    if args.analise:
+        etapa_analise(args)
+    if args.tendencias:
+        etapa_tendencias(args)
+    if args.modelo:
+        trainer_ref, fe_ref, _ = etapa_modelo(args)
+    if args.prever:
+        etapa_prever_hipotetico(trainer_ref, fe_ref)
 
 
 if __name__ == "__main__":

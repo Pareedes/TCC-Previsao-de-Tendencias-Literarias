@@ -1,82 +1,188 @@
 # Relatório Técnico: Previsão de Tendências Literárias (Skoob)
 
-Este documento detalha tecnicamente o funcionamento completo do pipeline de dados, incluindo o fluxo de execução, as variáveis coletadas e tratadas, e a fundamentação legal e técnica da coleta de dados online (Web Scraping).
+Este documento detalha o funcionamento técnico completo do pipeline de dados — o fluxo de execução, as variáveis utilizadas, a metodologia de modelagem e as decisões de engenharia que fundamentam o projeto.
 
 ---
 
-## 1. Funcionamento do Programa (Pipeline Ponto a Ponto)
+## 1. Fonte de Dados
 
-O sistema (orquestrado pelo `main.py`) opera em um pipeline de 4 estágios lineares:
+O projeto utiliza um **dataset público com licença Public Domain** contendo dados do Skoob — a maior rede social para leitores do Brasil. O dataset está armazenado localmente em `dados.csv` (raiz do projeto) e **não requer nenhuma etapa de coleta online**.
 
-### Etapa 1: Coleta de Dados (Scraping)
-1. O script inicializa o `BookScraper` com um pool de 5 threads concorrentes (via `ThreadPoolExecutor`), otimizando o tempo de processamento.
-2. Cada thread solicita a página de um livro específico (`https://www.skoob.com.br/pt/book/{id}`).
-3. A extração intercepta tanto os metadados visíveis na página HTML (usando BeautifulSoup) quanto os dados estruturados trafegados nos bastidores do Next.js (Flight Data JSON).
-4. Em seguida, o `ReviewScraper` busca as resenhas textuais dos livros mais populares utilizando os endpoints públicos (ex: `.../books/{id}/reviews`).
-5. Os dados extraídos são salvos em `data/raw/books_raw.csv` e `data/raw/reviews_raw.csv`.
+| Atributo | Valor |
+|---|---|
+| **Licença** | Public Domain |
+| **Volume bruto** | ~12.000 livros |
+| **Após limpeza** | 9.742 livros |
+| **Período coberto** | Publicações de 1900 a 2020 |
+| **Janela de análise temporal** | 2000–2020 |
 
-### Etapa 2: Processamento e Tratamento (Data Cleaning & NLP)
-1. **Limpeza:** O módulo `DataCleaner` remove livros sem informações básicas cruciais e padroniza dados incorretos, como datas e tipos numéricos.
-2. **Processamento NLP:** O módulo `NLPProcessor` atua nos textos das resenhas (Natural Language Processing). Usando a biblioteca `nltk`, ele tokeniza os textos, remove "stopwords" (palavras neutras do português) e analisa se o sentimento da resenha é Positivo, Negativo ou Neutro.
-3. **Enriquecimento:** O `DataEnricher` funde esses dados textuais normalizados às estatísticas frias, calculando Média Móvel de Notas, Taxa de Engajamento, market_share (%) e um *Score Absoluto de Popularidade* para cada um dos gêneros contidos no banco.
-4. Gera-se o `data/processed/genre_trends.csv`.
-
-### Etapa 3: Análises Descritivas e Visualização
-1. O Módulo `DescriptiveAnalysis` calcula coeficientes e médias percentuais.
-2. Usando `matplotlib` e `seaborn`, os scripts geram ~10 gráficos salvos na pasta `data/results/`, incluindo Correlação de Spearman, Distribuição de Sentimentos (NLP) e Evolução do Score dos gêneros literários.
-
-### Etapa 4: Modelagem Preditiva (Machine Learning)
-1. Através da biblioteca `Scikit-Learn`, a classe `FeatureEngineer` agrupa as métricas de Engajamento, Sentimento e Popularidade como "Features" independentes.
-2. O sistema divide a base entre "Treino" (80%) e "Teste" (20%).
-3. Três modelos matemáticos competem para aprender as relações causais na base de Treino:
-   - **Regressão Linear Múltipla**
-   - **Árvore de Decisão** (Decision Tree Regressor)
-   - **Floresta Aleatória** (Random Forest Regressor)
-4. O `ModelEvaluator` testa-os contra a base de Teste que eles nunca viram. O modelo avalia usando erro médio ($MAE$) e R-quadrado ($R^2$). O modelo com melhor performance (geralmente Random Forest) é salvo em disco (`data/models/`).
-5. O `TrendPredictor` infere o "Popularidade Score" virtual de todos os gêneros usando as anomalias atuais do passo de treinamento, ranqueando quais Gêneros estão em Tendência Alta. Estes resultados são gerados no `data/results/previsao_tendencias.csv` e no relatório txt.
+Esta escolha metodológica garante **reprodutibilidade total** do projeto: qualquer pessoa com o arquivo `dados.csv` pode executar o pipeline do zero e obter os mesmos resultados.
 
 ---
 
-## 2. Variáveis Coletadas e Geradas
+## 2. Pipeline End-to-End
 
-Durante a vida do pipeline, os seguintes DataPoints principais são mapeados:
+O sistema é orquestrado pelo `main.py`, que expõe tanto um menu interativo quanto uma interface de linha de comando (CLI). O pipeline opera em 5 etapas lineares:
 
-### Váriaveis Coletadas (Skoob)
-- `book_id` (Inteiro): Identificador do livro no Skoob.
-- `titulo` (String): Título oficial na página.
-- `autor` (String): Autor extraído das tags ou HTML de dados.
-- `generos` (String Multivalorada): Extraído do Flight Data Javascript (Next.js).
-- `nota_media` (Float): Nota geral da rede para o livro (1.0 a 5.0).
-- `total_avaliacoes` (Inteiro): Total de reviews simples.
-- `total_leitores` (Inteiro): Soma de usuários que marcaram (Leu, Lendo, Quero Ler).
-- `total_resenhas` (Inteiro): Total de contribuições textuais gravadas.
-- `resenha_texto` (String): O conteúdo do tipo resenha escrito pelos leitores (públicas).
-- `resenha_data` (Data): Registra o dia/hora que o usuário redigiu a resenha.
+### Etapa 1 — Carga e Limpeza do Dataset (`processing/data_loader.py`)
 
-### Variáveis Tratadas e Calculadas Matematicamente
-- `sentimento_score` (Float [-1 a 1]): Calculado via Léxicos NLP provando se a resenha teve um tom agressivo/insatisfeito (-x) ou positivo (+x).
-- `engajamento_score` (Float): Razão combinada entre ($Resenhas + Avaliações) / Leitores Totais$. Mede se os leitores apenas clicam ou se realmente sentem a necessidade falar sobre o livro.
-- `popularidade_score` (Float): O produto entre `nota_media`, `total_leitores` e `engajamento`. É a "medida métrica de Força Base do Gênero".
-- `popularidade_prevista` (Float): O Output puro do modelo de Machine Learning acusando o tamanho da popularidade latente para um futuro próximo (após detecção de anomalias na Base Oculta de Features).
+1. O módulo `DataLoader` lê o arquivo `dados.csv` com `pandas`.
+2. São removidos registros sem informações essenciais (`titulo`, `genero`, `leram`).
+3. Colunas numéricas são padronizadas (tipos corretos, tratamento de nulos com medianas).
+4. A coluna `genero` — que contém múltiplos gêneros separados por vírgula — é explodida em listas normalizadas.
+5. O dataset limpo é salvo em `data/processed/books_clean.csv` (**9.742 livros**).
+
+### Etapa 2 — Processamento NLP das Descrições (`processing/nlp_processor.py`)
+
+1. O módulo `NLPProcessor` atua na coluna `descricao` (sinopses dos livros) usando a biblioteca `nltk`.
+2. Os textos são tokenizados e stopwords do português são removidas.
+3. É calculado um **score de sentimento** por descrição (escala −1 a +1), que depois é usado como uma das features do modelo de ML.
+4. São extraídas as **palavras-chave** mais relevantes de cada sinopse.
+5. Resultados salvos em `data/processed/nlp_descricoes.csv`.
+
+> **Nota:** Esta etapa é opcional. Caso a coluna `descricao` esteja ausente ou vazia, o pipeline continua normalmente sem a feature de sentimento.
+
+### Etapa 3 — Análise Descritiva e Visualizações (`analysis/visualizations.py`)
+
+1. O módulo `Visualizations` gera automaticamente o conjunto completo de gráficos do projeto usando `matplotlib` e `seaborn`.
+2. Principais gráficos gerados:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `distribuicao_score_popularidade.png` | Distribuição assimétrica do score alvo |
+| `top15_livros_popularidade.png` | Validação qualitativa: os 15 livros com maior score |
+| `heatmap_correlacoes.png` | Correlações de Spearman entre variáveis numéricas |
+| `comparacao_modelos_defesa.png` | Comparação de MAE, RMSE e R² entre os três modelos |
+| `predicao_vs_real_random_forest.png` | Predição × valor real do melhor modelo |
+| `feature_importance.png` | Importância relativa das features no Random Forest |
+
+3. Todos os gráficos são salvos em `data/results/`.
+
+### Etapa 4 — Análise Temporal de Gêneros (`analysis/genre_trends.py`)
+
+1. O módulo `GenreTrendAnalyzer` filtra o dataset para o período **2000–2020** e agrega leitores por gênero e ano.
+2. Cada gênero é classificado em uma de quatro categorias de tendência:
+
+| Categoria | Critério |
+|---|---|
+| 🟢 **Ascensão** | Crescimento ≥ 50% entre os períodos inicial e final |
+| 🔵 **Emergente** | Surgiu apenas no período 2013–2020 (ausente no início) |
+| ⚪ **Estagnação** | Variação entre −20% e +50% |
+| 🔴 **Declínio** | Queda > 20% |
+
+3. São gerados os gráficos de linha (`evolucao_generos_defesa.png`), heatmap (`heatmap_genero_ano.png`) e barras de crescimento (`crescimento_generos.png`).
+4. Resultados salvos em `data/processed/genre_trends_temporal.csv`.
+
+### Etapa 5 — Treinamento e Avaliação dos Modelos de ML
+
+#### 5a. Engenharia de Features (`models/feature_engineering.py`)
+
+A classe `FeatureEngineer` constrói um vetor de **30 features** por livro:
+
+| Categoria | Features | Quantidade |
+|---|---|---|
+| **Numéricas** | `paginas`, `ano`, `rating`, % leitoras mulheres, taxa de abandono, taxa de conclusão, razão desejo/leitores, tamanho da descrição | 8 |
+| **Gêneros (OHE)** | Top 20 gêneros como colunas binárias (0 ou 1) | 20 |
+| **Editora** | Label encoding — top 10 editoras + "Outras" | 1 |
+| **NLP** | Score de sentimento da sinopse | 1 |
+
+**Holdout Temporal** — em vez de um split aleatório, o conjunto é dividido por data de publicação:
+
+```
+Treino: livros publicados até 2017  →  8.021 amostras (82%)
+Teste : livros publicados em 2018–2020  →  1.721 amostras (18%)
+```
+
+Essa abordagem simula o uso real do modelo: treinado com histórico, testado em livros que ele nunca viu — metodologicamente mais rigoroso para dados com dimensão temporal.
+
+#### 5b. Variável Alvo — Score de Popularidade
+
+O modelo não prediz a nota do livro, mas sim um **Score de Popularidade composto** (escala 0–1) que captura três dimensões de engajamento do leitor:
+
+```
+popularidade_score = 0.5 × norm(leram) + 0.3 × norm(avaliacao) + 0.2 × norm(resenha)
+```
+
+| Componente | Peso | Justificativa |
+|---|---|---|
+| `leram` | 50% | Alcance — quantas pessoas efetivamente concluíram o livro |
+| `avaliacao` | 30% | Engajamento ativo — quem se importou o suficiente para avaliar |
+| `resenha` | 20% | Engajamento qualitativo — quem escreveu sobre o livro |
+
+#### 5c. Treinamento (`models/train.py`)
+
+Três modelos de regressão supervisionada competem sobre o mesmo conjunto de treino:
+
+- **Regressão Linear Múltipla** — baseline linear
+- **Árvore de Decisão** (Decision Tree Regressor)
+- **Random Forest Regressor** — ensemble de múltiplas árvores com bagging
+
+Todos os modelos treinados são persistidos em `data/models/` via `joblib`.
+
+#### 5d. Avaliação (`models/evaluate.py`)
+
+O `ModelEvaluator` avalia os modelos no conjunto de teste usando:
+
+| Métrica | Descrição |
+|---|---|
+| **MAE** | Erro médio absoluto na escala do score (0–1) |
+| **RMSE** | Raiz do erro quadrático médio — penaliza erros grandes |
+| **R²** | Coeficiente de determinação — % da variância explicada |
+| **CV R² (5-fold)** | R² médio em validação cruzada — robustez do modelo |
 
 ---
 
-## 3. Legitimidade da Coleta de Dados (Web Scraping Legal)
+## 3. Resultados
 
-A legalidade do processo de *Web Scraping* realizado por este script obedece a limites técnicos e normas éticas estritas de computação, adequando-se perfeitamente a uma pesquisa acadêmica legítima (TCC), embasada nos seguintes pilares:
+### Modelos de Machine Learning
 
-### 1. Ausência de Quebra de Segurança / Dados Públicos
-O script interage exclusivamente com a interface pública do Skoob. Não há injeção SQL, invasão, quebra de senhas (brute forcing) ou uso de credenciais indevidas. Ele consome unicamente os dados aos quais qualquer navegador de usuário normal tem acesso quando visita um perfil de livro de forma logoff (sem login na plataforma). No Brasil, o entendimento da Lei Geral de Proteção de Dados (LGPD) e o Direito Digital apontam que dados deliberadamente abertos e não sensíveis podem ser catalogados dentro de bom senso, especialmente se dissociados de PII (Informações de Identificação Pessoal).
+| Modelo | MAE | RMSE | R² | CV R² |
+|---|---|---|---|---|
+| **Random Forest** ← melhor | **0.0591** | **0.0938** | **0.6986** | — |
+| Árvore de Decisão | 0.0595 | 0.0956 | 0.6870 | — |
+| Regressão Linear | 0.1327 | 0.1640 | 0.0785 | — |
 
-### 2. Anonimização Total (Estatística Agregada)
-Em nenhum momento a coleta armazena dados de Identificação de Usuários (nomes de usuário, e-mails ou fotos que deixaram resenhas). A pesquisa opera no espectro Agregado, o que extingue o conflito com a LGPD (Lei 13.709/18).
+O **Random Forest** alcançou R² = 0.70, explicando aproximadamente 70% da variância do score de popularidade. O R² baixo da Regressão Linear (0.08) confirma empiricamente que a relação entre as características do livro e sua popularidade é **não-linear** — validando a escolha dos modelos baseados em árvores.
 
-### 3. Rate Limiting Ético Constritivo
-Diferente de ataques "DDoS", o código em `config.py` e `skoob_client.py` instrui expressamente o software a:
-- Implementar `REQUEST_DELAY_MIN = 0.5` a `1.5` segundos por instância.
-- Assumir comportamentos limpos via *User-Agent* padronizados evitando burlar Cloudflares.
-- Conduzir uma carga concorrida de no máximo `MAX_WORKERS = 5`. 
-As políticas protegem integralmente a infraestrutura de servidores da plataforma alvo, não afetando sua disponibilidade nem onerando suas bases.
+Os 30% de variância não explicados pelo melhor modelo correspondem a fatores externos ao dataset: ações de marketing editorial, adaptações para cinema/TV e fenômenos virais em redes sociais — fatores genuinamente impossíveis de capturar com os dados disponíveis.
 
-### Conclusão Legal
-Visto que a finalidade desta pesquisa é estritamente **Acadêmica e Não-Comercial** (Citar § Artigos de Educação Constitucional ou uso "Fair Use"), processada com limitação agressiva de requests e calcada sob anonimização Pessoal, o *pipeline* da coleta de dados constitui um estudo exploratório plenamente documentável e legítimo.
+### Análise Temporal de Gêneros (2000–2020)
+
+| Categoria | Quantidade de Gêneros |
+|---|---|
+| 🟢 Ascensão | 60 |
+| 🔵 Emergente | 221 |
+| ⚪ Estagnação | 2 |
+| 🔴 Declínio | 69 |
+
+**Principais gêneros em ascensão:**
+
+| Gênero | Crescimento de Leitores | Crescimento % |
+|---|---|---|
+| Jovem Adulto | +82.967 | +14.581% |
+| Fantasia | +67.130 | +4.889% |
+| Não-Ficção | +42.431 | +4.041% |
+| Ficção Científica | +21.958 | +1.646% |
+| Romance | +199.180 | +1.922% |
+
+---
+
+## 4. Reprodutibilidade
+
+Todos os parâmetros do pipeline são centralizados em `config.py`:
+
+| Parâmetro | Valor | Descrição |
+|---|---|---|
+| `RANDOM_STATE` | 42 | Seed global para reprodutibilidade |
+| `CV_FOLDS` | 5 | Folds para validação cruzada |
+| `ANO_CORTE_TREINO` | 2017 | Divisão temporal treino/teste |
+| `ANO_INICIO_ANALISE` | 2000 | Início da análise de gêneros |
+| `ANO_FIM_ANALISE` | 2020 | Fim da análise de gêneros |
+| `PESO_LERAM` | 0.5 | Peso do score de popularidade |
+| `TOP_GENEROS_FEATURES` | 20 | Nº de gêneros usados como features |
+| `TOP_EDITORAS_FEATURES` | 10 | Nº de editoras categorizadas |
+
+---
+
+*IFTM — Campus Avançado Uberaba Parque Tecnológico | Engenharia de Computação | TCC 2026*
+*Gabriel Paredes Ferreira*

@@ -1,6 +1,9 @@
 """
 Configurações e constantes do projeto TCC.
 Previsão de Tendências Literárias com Base em Dados do Skoob.
+
+NOTA: O projeto utiliza um dataset público (Public Domain) do Skoob
+com ~12.000 livros, em conformidade com os Termos de Uso da plataforma.
 """
 
 import os
@@ -20,78 +23,20 @@ for d in [RAW_DATA_DIR, PROCESSED_DATA_DIR, RESULTS_DIR, MODELS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 # ============================================================
-# Configurações do Skoob
+# Fonte de dados — Dataset Público
 # ============================================================
-SKOOB_BASE_URL = "https://www.skoob.com.br"
-SKOOB_BOOK_URL = SKOOB_BASE_URL + "/livro/{book_id}"
-SKOOB_SEARCH_URL = SKOOB_BASE_URL + "/livro/lista"
-SKOOB_API_BASE = SKOOB_BASE_URL + "/v1"
+# Dataset com licença Public Domain contendo ~12.000 livros do Skoob
+DADOS_CSV_PATH = os.path.join(BASE_DIR, "dados.csv")
 
-# ============================================================
-# Configurações de Scraping
-# ============================================================
-REQUEST_DELAY_MIN = 0.5        # Delay mínimo entre requisições (segundos)
-REQUEST_DELAY_MAX = 1.5        # Delay máximo entre requisições (segundos)
-REQUEST_TIMEOUT = 20           # Timeout por requisição (segundos)
-MAX_RETRIES = 3                # Número de tentativas em caso de falha
-BACKOFF_FACTOR = 1.5           # Fator de backoff exponencial
-MAX_WORKERS = 5                # Threads simultâneas para scraping concorrente
-
-# Headers HTTP para simular navegador real
-HTTP_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive",
-}
-
-# ============================================================
-# Configurações de Coleta
-# ============================================================
-# Volume alvo de livros a coletar
-TARGET_BOOKS_COUNT = 5000  # Conforme requisitado, ideal para o projeto
-
-# Gêneros literários principais para busca direcionada
-GENEROS_ALVO = [
-    "Romance",
-    "Fantasia",
-    "Ficção Científica",
-    "Terror",
-    "Suspense",
-    "Mistério",
-    "Drama",
-    "Aventura",
-    "Infantojuvenil",
-    "Jovem Adulto",
-    "Poesia",
-    "Biografia",
-    "Autoajuda",
-    "História",
-    "Humor",
-    "Clássicos",
-    "Distopia",
-    "HQ",
-    "Mangá",
-    "Religião",
-    "Erótico",
-    "Policial",
-    "Crônica",
-    "Conto",
-    "Filosofia",
-    "Psicologia",
-    "Negócios",
-]
+# Descrição da fonte (para documentação e relatórios)
+DADOS_FONTE = "Dataset Público do Skoob — Public Domain License"
+DADOS_PERIODO = "Publicações até 2020"
+DADOS_VOLUME = "~12.000 livros"
 
 # ============================================================
 # Configurações de NLP
 # ============================================================
 NLP_LANGUAGE = "portuguese"
-MAX_REVIEWS_PER_BOOK = 50  # Limite de resenhas por livro para NLP
 
 # ============================================================
 # Configurações dos Modelos de ML
@@ -100,13 +45,25 @@ TEST_SIZE = 0.2            # Proporção do conjunto de teste
 RANDOM_STATE = 42          # Seed para reprodutibilidade
 CV_FOLDS = 5               # Folds para validação cruzada
 
+# Holdout temporal: treinar em livros até ANO_CORTE, testar após
+ANO_CORTE_TREINO = 2017    # Treinar com até 2017 inclusive
+ANO_INICIO_ANALISE = 2000  # Início da análise temporal de gêneros
+ANO_FIM_ANALISE = 2020     # Fim da análise temporal de gêneros
+
+# Fórmula do Score de Popularidade (pesos somam 1.0)
+PESO_LERAM = 0.5           # Peso: nº de leitores que concluíram
+PESO_AVALIACAO = 0.3       # Peso: nº de avaliações
+PESO_RESENHA = 0.2         # Peso: nº de resenhas escritas
+
+# Top N gêneros a usar como features no modelo
+TOP_GENEROS_FEATURES = 20  # Cria N colunas dummy de gênero
+TOP_EDITORAS_FEATURES = 10 # Cria N categorias de editora
+
 # ============================================================
 # Arquivos de saída
 # ============================================================
-RAW_BOOKS_FILE = os.path.join(RAW_DATA_DIR, "books_raw.csv")
-RAW_REVIEWS_FILE = os.path.join(RAW_DATA_DIR, "reviews_raw.csv")
-CLEANED_BOOKS_FILE = os.path.join(PROCESSED_DATA_DIR, "books_cleaned.csv")
-CLEANED_REVIEWS_FILE = os.path.join(PROCESSED_DATA_DIR, "reviews_cleaned.csv")
-ENRICHED_BOOKS_FILE = os.path.join(PROCESSED_DATA_DIR, "books_enriched.csv")
-GENRE_TRENDS_FILE = os.path.join(PROCESSED_DATA_DIR, "genre_trends.csv")
-NLP_RESULTS_FILE = os.path.join(PROCESSED_DATA_DIR, "nlp_sentiment.csv")
+CLEANED_BOOKS_FILE = os.path.join(PROCESSED_DATA_DIR, "books_clean.csv")
+GENRE_TRENDS_FILE = os.path.join(PROCESSED_DATA_DIR, "genre_trends_temporal.csv")
+NLP_RESULTS_FILE = os.path.join(PROCESSED_DATA_DIR, "nlp_descricoes.csv")
+FEATURES_FILE = os.path.join(PROCESSED_DATA_DIR, "features_ml.csv")
+MODEL_RESULTS_FILE = os.path.join(RESULTS_DIR, "resultados_modelos.csv")
